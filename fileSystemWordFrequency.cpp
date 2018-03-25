@@ -1,8 +1,7 @@
 /** Commands
 
-gcc -o semi_ordered_matrix_search -fopenmp semi_ordered_matrix_search.c
-./semi_ordered_matrix_search 
-export OMP_NUM_THREADS=3
+g++ -fopenmp -std=c++11 fileSystemWordFrequency.cpp
+./a.out 4
 
 **/
 
@@ -11,6 +10,7 @@ export OMP_NUM_THREADS=3
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <bits/stdc++.h>
 
 //For using directory calls
 #include <dirent.h>
@@ -25,7 +25,7 @@ using namespace std;
 #define MAX_BLOCK_SIZE 4096
 
 //Function declaration
-void deriveFreq(string dirName)
+void deriveFreq(unordered_map<string,int> *docFreq, string dirName)
 {
 	printf("%s by thread %d\n",dirName.c_str(),omp_get_thread_num());
 	//Open the directory
@@ -44,7 +44,7 @@ void deriveFreq(string dirName)
 			if(S_ISDIR(buf.st_mode))
 			{
 				#pragma omp task untied
-				deriveFreq(dirName+"/"+tempDir->d_name);
+				deriveFreq(docFreq,dirName+"/"+tempDir->d_name);
 			}
 			//File is a regular one
 			else
@@ -83,8 +83,8 @@ int main (int argc, char *argv[])
 	//Root directory name
 	string root = "root";
 	
-	//Unoredered map to store the document freq for each word
-	// unordered_map<string, int> documentFreq;
+	//Unordered map to store the document freq for each word
+	unordered_map<string,int> documentFreq;
 
 	double start_time = omp_get_wtime();
 
@@ -93,7 +93,7 @@ int main (int argc, char *argv[])
 	{	
 		#pragma omp single
 		{
-			deriveFreq(root);
+			deriveFreq(&documentFreq,root);
 		}			
 		
 	}  /* All threads join master thread and disband */
