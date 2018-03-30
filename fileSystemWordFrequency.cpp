@@ -25,9 +25,8 @@ using namespace std;
 #define MAX_BLOCK_SIZE 4096
 
 //Function declaration
-void deriveFreq(unordered_map<string,int> *docFreq, string dirName)
+void deriveFreq(unordered_map<string,int> docFreq[], string dirName)
 {
-	printf("%s by thread %d\n",dirName.c_str(),omp_get_thread_num());
 	//Open the directory
 	DIR* ds = opendir(dirName.c_str());
 	struct dirent* tempDir; 
@@ -37,34 +36,61 @@ void deriveFreq(unordered_map<string,int> *docFreq, string dirName)
 		//Check if directories are not current or parent
 		if((strcmp(tempDir->d_name,".") != 0) && (strcmp(tempDir->d_name,"..") != 0))
 		{
+			string str(tempDir->d_name);
+
 			//Copy file stat info in buffer
-		    stat((dirName+"/"+tempDir->d_name).c_str(), &buf);
+		    stat((dirName+"/"+str).c_str(), &buf);
 
 		    //Check if the file is a directory
 			if(S_ISDIR(buf.st_mode))
 			{
+				// printf("dirname + tempDir->d_name %s\n\n",(dirName+"/"+tempDir->d_name).c_str());
 				#pragma omp task untied
-				deriveFreq(docFreq,dirName+"/"+tempDir->d_name);
+				deriveFreq(docFreq,dirName+"/"+str);
 			}
 			//File is a regular one
 			else
 			{
 				//File processing(in parallel)
 
-				// char* buffer[MAX_BLOCK_SIZE];
-				// FILE* fp = fopen((dirName+"/"+tempDir->d_name).c_str());
-				// int nread;
-				// while(1)
-				// {
-				// 	nread = fread(buffer,sizeof(char),MAX_BLOCK_SIZE,fp);
+				int threadNo = omp_get_thread_num();
+				char buffer[MAX_BLOCK_SIZE];
+				printf("file %s\n",(dirName+"/"+str).c_str());
+				FILE* fp = fopen((dirName+"/"+str).c_str(),"r");
+				int nread;
 
-				// 	#pragma omp parallel for
-				// 	for()
+				// Set containing the words found in the file
+				set<string> wordsInFile;
+				while(1)
+				{
+					nread = fread(buffer,sizeof(char),MAX_BLOCK_SIZE,fp);
+					
+					char* token = strtok(buffer,",./;-!?@&(){}[]<>:'\" \r");
 
-				// 	//Last iteration
-				// 	if(nread < MAX_BLOCK_SIZE)
-				// 		break;
-				// }
+				    while(token != NULL)
+				    {
+				    	for(int k=0;k<strlen(token);k++)
+				        {
+				            token[k] = tolower(token[k]);
+				        }
+
+				        string str(token);
+
+				        if(wordsInFile.find(str) == wordsInFile.end())
+				        {
+				        	docFreq[threadNo][str]++;
+				        	wordsInFile.insert(str);
+				        }
+
+				        token = strtok(NULL,",./;-!?@&(){}[]<>:'\" \r");
+				    }
+
+					//Last iteration
+					if(nread < MAX_BLOCK_SIZE)
+						break;
+				}
+
+				fclose(fp);
 			}
 		} 
 	}
@@ -84,7 +110,8 @@ int main (int argc, char *argv[])
 	string root = "root";
 	
 	//Unordered map to store the document freq for each word
-	unordered_map<string,int> documentFreq;
+	unordered_map<string,int> documentFreq[nthreads];
+	unordered_map<string,int> allDocumentFreq;
 
 	double start_time = omp_get_wtime();
 
@@ -93,15 +120,26 @@ int main (int argc, char *argv[])
 	{	
 		#pragma omp single
 		{
-			deriveFreq(&documentFreq,root);
+			deriveFreq(documentFreq,root);
 		}			
 		
 	}  /* All threads join master thread and disband */
 
-	
+	unordered_map<string,int> :: iterator iter;
+	for(int i=0;i<nthreads;i++)
+	{
+		for(iter=documentFreq[i].begin();iter!=documentFreq[i].end();iter++)
+		{
+			allDocumentFreq[iter->first] += iter->second;
+		}
+	}
+
 	double time = omp_get_wtime() - start_time;
 
-	// printf("%d %d\n",i,j);
+	for(iter=allDocumentFreq.begin();iter!=allDocumentFreq.end();iter++)
+	{
+		cout << iter->first << ":"  << iter->second << endl;
+	}
 
 	printf("Time: %lf\n", time);
 
