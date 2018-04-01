@@ -27,7 +27,7 @@ using namespace std;
 //Function declaration
 void deriveFreq(vector<string> files[], string dirName)
 {
-	//Open the directory
+	//Open the direc28tory
 	DIR* ds = opendir(dirName.c_str());
 	struct dirent* tempDir; 
 	struct stat buf;
@@ -144,46 +144,43 @@ int main (int argc, char *argv[])
 	//Unordered map to store the document freq for each word
 	unordered_map<string,int> documentFreq[nthreads];
 	vector<string> files[nthreads];
+	vector<string> allFiles;
 
 	double start_time = omp_get_wtime();
 
 	/* Fork a team of threads giving them their own copies of variables */
 	#pragma omp parallel
 	{	
+		int threadNo = omp_get_thread_num();
+		
 		#pragma omp single
 		{
 			deriveFreq(files,root);
 		}			
 		
-	}  /* All threads join master thread and disband */
+		#pragma omp barrier
 
-	unordered_map<string,int> allDocumentFreq;
-	vector<string> allFiles;
-	
-	#pragma omp parallel
-	{
-		int threadNo = omp_get_thread_num();
-
-		// TO ensure thread safety of the global vector
+		// To ensure thread safety of the global vector
 		#pragma omp critical
 		{
 			// Merge each thread's vector containing name of files into a global vector
 			allFiles.insert(allFiles.end(),files[threadNo].begin(),files[threadNo].end());
 		}
-	}
 
-	//////////////////////////////////////////////////////////////////////////////// dynamic to static
-	#pragma omp parallel for schedule(dynamic)
-	for(int i=0;i<allFiles.size();i++)
-	{
-		processFile(documentFreq,allFiles[i]);	
-	}	
+		#pragma omp barrier
 
-	unordered_map<string,int> :: iterator iter;
+		// Parallel File processing
+		//////////////////////////////////////////////////////////////////////////////// dynamic to static and dynamic with chunk defined
+		#pragma omp for schedule(dynamic)
+		for(int i=0;i<allFiles.size();i++)
+		{
+			processFile(documentFreq,allFiles[i]);	
+		}
+		
+		#pragma omp barrier
 
-	// Parallel reduce
-	#pragma omp parallel
-	{
+		// printf("hello by thread %d\n",threadNo);
+		// Parallel reduce	
 		int level = nthreads;
 		int index = 2;
 		while(level!=1)
@@ -198,10 +195,12 @@ int main (int argc, char *argv[])
 
 			#pragma omp barrier
 		}
-	}
+
+	}  /* All threads join master thread and disband */
 
 	double time = omp_get_wtime() - start_time;
-
+	
+	unordered_map<string,int> :: iterator iter;
 	for(iter=documentFreq[0].begin();iter!=documentFreq[0].end();iter++)
 	{
 		cout << iter->first << ":"  << iter->second << endl;
