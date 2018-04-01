@@ -1,6 +1,6 @@
 /** Commands
 
-g++ -fopenmp -std=c++11 fileSystemWordFrequency1.cpp
+g++ -fopenmp -Iinclude -std=c++11 fileSystemWordFrequency1.cpp
 ./a.out 4
 
 **/
@@ -64,40 +64,69 @@ void deriveFreq(vector<string> files[], string dirName)
 void processFile(unordered_map<string,int> docFreq[], string filename)
 {
 	int threadNo = omp_get_thread_num();
-	char buffer[MAX_BLOCK_SIZE];
-	// printf("file %s\n",filename.c_str());
-	FILE* fp = fopen(filename.c_str(),"r");
-	int nread;
 
 	// Set containing the words found in the file
 	set<string> wordsInFile;
-	while(1)
-	{
-		nread = fread(buffer,sizeof(char),MAX_BLOCK_SIZE,fp);
-		
-		char* token = strtok(buffer,",./;-!?@&(){}[]<>:'\" \r");
 
-	    while(token != NULL)
+	ifstream inputFile;
+	string readLine;
+   	
+	// Opening the file
+	inputFile.open(filename);
+
+ 	while(getline(inputFile, readLine))
+	{
+	    if(readLine.empty())
+	    {    
+	        continue;
+	    }
+
+	    char* lineString = &readLine[0];
+	    
+	   	//Tokenize the line using punctuation marks
+	    char* token;
+
+	    while((token = strtok_r(lineString,",./;-!?@&(){}[]<>:'\" \r",&lineString)))
 	    {
 	    	for(int k=0;k<strlen(token);k++)
 	        {
 	            token[k] = tolower(token[k]);
 	        }
 
-	        string str(token);
-
+	        string str(token); 
+	        
 	        if(wordsInFile.find(str) == wordsInFile.end())
 	        {
 	        	docFreq[threadNo][str]++;
 	        	wordsInFile.insert(str);
 	        }
-
-	        token = strtok(NULL,",./;-!?@&(){}[]<>:'\" \r");
 	    }
+	}
+    
+	//Closing the file
+	inputFile.close();
+}
 
-		//Last iteration
-		if(nread < MAX_BLOCK_SIZE)
-			break;
+unordered_map<string,int> reduceMaps(unordered_map<string,int> map1, unordered_map<string,int> map2)
+{
+	unordered_map<string,int> :: iterator iter;
+	if(map1.size() > map2.size())
+	{
+		for(iter=map2.begin();iter!=map2.end();iter++)
+		{
+			map1[iter->first] += iter->second;
+		}
+		
+		return map1;
+	}
+	else
+	{
+		for(iter=map1.begin();iter!=map1.end();iter++)
+		{
+			map2[iter->first] += iter->second;
+		}
+		
+		return map2;
 	}
 }
 
@@ -140,10 +169,10 @@ int main (int argc, char *argv[])
 		{
 			// Merge each thread's vector containing name of files into a global vector
 			allFiles.insert(allFiles.end(),files[threadNo].begin(),files[threadNo].end());
-			// files[threadNo].clear();
 		}
 	}
 
+	//////////////////////////////////////////////////////////////////////////////// dynamic to static
 	#pragma omp parallel for schedule(dynamic)
 	for(int i=0;i<allFiles.size();i++)
 	{
@@ -151,33 +180,34 @@ int main (int argc, char *argv[])
 	}	
 
 	unordered_map<string,int> :: iterator iter;
-	for(int i=0;i<nthreads;i++)
+
+	// Parallel reduce
+	#pragma omp parallel
 	{
-		for(iter=documentFreq[i].begin();iter!=documentFreq[i].end();iter++)
+		int level = nthreads;
+		int index = 2;
+		while(level!=1)
 		{
-			allDocumentFreq[iter->first] += iter->second;
+			if(omp_get_thread_num()%index == 0)
+			{
+				documentFreq[omp_get_thread_num()] = reduceMaps(documentFreq[omp_get_thread_num()],documentFreq[omp_get_thread_num() + (index/2)]);
+			}
+
+			level /= 2;
+			index *= 2;
+
+			#pragma omp barrier
 		}
 	}
 
 	double time = omp_get_wtime() - start_time;
 
-	for(iter=allDocumentFreq.begin();iter!=allDocumentFreq.end();iter++)
+	for(iter=documentFreq[0].begin();iter!=documentFreq[0].end();iter++)
 	{
 		cout << iter->first << ":"  << iter->second << endl;
 	}
 
-	// for(int i=0;i<nthreads;i++)
-	// {
-	// 	printf("vector %d:\n",i);
-	// 	for(int j=0;j<files[i].size();j++)
-	// 	{
-	// 		cout << files[i][j] << " ";
-	// 	}
-	// 	cout << endl;
-	// }
-
 	printf("Time: %lf\n", time);
-
 
 	return 0;
 
