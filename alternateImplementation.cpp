@@ -1,6 +1,6 @@
 /** Commands
 
-g++ -fopenmp -Iinclude -std=c++11 fileSystemWordFrequency1.cpp
+g++ -fopenmp -std=c++11 alternateImplementation.cpp
 ./a.out 4
 
 **/
@@ -179,7 +179,6 @@ int main (int argc, char *argv[])
 		
 		#pragma omp barrier
 
-		// printf("hello by thread %d\n",threadNo);
 		// Parallel reduce	
 		int level = nthreads;
 		int index = 2;
