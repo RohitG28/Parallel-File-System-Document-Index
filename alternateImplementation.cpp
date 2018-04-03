@@ -139,7 +139,7 @@ int main (int argc, char *argv[])
 	omp_set_num_threads(nthreads);
 
 	//Root directory name
-	string root = "root";
+	string root = "Hello/";
 	
 	//Unordered map to store the document freq for each word
 	unordered_map<string,int> documentFreq[nthreads];
